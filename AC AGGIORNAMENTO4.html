@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraContabilita</title>
+    <style>
+        /* --- STILI BASE --- */
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .app-container { display: flex; max-width: 1200px; margin: 0 auto; gap: 20px; }
+        
+        /* --- SCHERMATA DI AUTENTICAZIONE (LOGIN / REGISTRAZIONE) --- */
+        .auth-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:#2c3e50; display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .auth-box { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); width: 100%; max-width: 380px; text-align: center; }
+        .auth-box h2 { margin-bottom: 20px; color: #2c3e50; margin-top: 10px; }
+        
+        /* Tab per switchare tra Login e Registrazione */
+        .auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+        .auth-tab { flex: 1; padding: 10px; cursor: pointer; font-weight: bold; color: #7f8c8d; transition: 0.2s; }
+        .auth-tab.active { color: #3498db; border-bottom: 2px solid #3498db; }
+        
+        .auth-form { display: none; }
+        .auth-form.active { display: block; }
+
+        .auth-box input { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; }
+        .btn-auth { background: #3498db; color: white; border: none; width: 100%; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .btn-auth.btn-register { background: #2ecc71; }
+        .btn-auth:hover { opacity: 0.9; }
+        .auth-error { color: #e74c3c; font-size: 14px; display: none; margin-top: 10px; }
+        .auth-success { color: #2ecc71; font-size: 14px; display: none; margin-top: 10px; }
+
+        /* --- HEADER --- */
+        header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; max-width: 1200px; margin-left: auto; margin-right: auto; }
+        header h1 { margin: 0; font-size: 24px; color: #2c3e50; }
+        .btn-add { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.2s; }
+        .btn-add:hover { background: #2980b9; }
+
+        /* --- STRUTTURA APPLICAZIONE --- */
+        #main-app { display: none; } 
+        .main-content { flex: 3; display: flex; flex-direction: column; gap: 20px; }
+        .sidebar { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 20px; }
+        .box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .box h2 { margin-top: 0; font-size: 18px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        
+        /* --- FORM INSERIMENTO --- */
+        details summary { cursor: pointer; font-weight: bold; font-size: 16px; color: #2c3e50; outline: none; margin-bottom: 15px;}
+        .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .form-row input, .form-row select { flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        
+        /* --- LISTA ABBONAMENTI --- */
+        .subs-list { list-style: none; padding: 0; margin: 0; }
+        .subs-list li { padding: 15px; border-radius: 5px; margin-bottom: 10px; border-left: 5px solid #2ecc71; background: #f9f9f9; display: flex; justify-content: space-between; align-items: center; transition: 0.3s;}
+        .subs-list li.canceled { border-left-color: #e74c3c; background: #fdf2f2; opacity: 0.8; }
+        
+        .btn-cancel { background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        .btn-cancel:hover { background: #c0392b; }
+
+        /* --- STATISTICHE E PULSANTI --- */
+        .stat-item { margin-bottom: 15px; }
+        .stat-item label { display: block; font-size: 12px; color: #7f8c8d; text-transform: uppercase; }
+        .stat-item span { font-size: 20px; font-weight: bold; color: #2c3e50; }
+        .sidebar-btn { background: #ecf0f1; border: 1px solid #bdc3c7; padding: 10px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; margin-bottom: 10px; text-align: left; transition: 0.2s;}
+        .sidebar-btn:hover { background: #e0e6ed; }
+        .btn-danger { background: #e74c3c; color: white; border: none; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px;}
+        .btn-danger:hover { background: #c0392b; }
+        .footer-count { margin-top: auto; padding-top: 20px; font-size: 14px; font-weight: bold; color: #7f8c8d; }
+
+        /* --- MODALI --- */
+        .modal-overlay { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 500px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #7f8c8d; }
+    </style>
+    <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000"> 
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(registration => {
+          console.log('Service Worker registrato con successo:', registration);
+        })
+        .catch(error => {
+          console.log('Registrazione del Service Worker fallita:', error);
+        });
+    });
+  }
+</script>
+</head>
+<body>
+
+    <div id="auth-screen" class="auth-overlay">
+        <div class="auth-box">
+            <h2>📊 AuraContabilita</h2>
+            
+            <div class="auth-tabs">
+                <div id="tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Accedi</div>
+                <div id="tab-register" class="auth-tab" onclick="switchAuthTab('register')">Crea Account</div>
+            </div>
+
+            <div id="form-login" class="auth-form active">
+                <input type="email" id="login-email" placeholder="Inserisci la tua Email">
+                <input type="password" id="login-password" placeholder="Inserisci la Password">
+                <button class="btn-auth" onclick="gestisciLogin()">Accedi</button>
+                <p id="login-error" class="auth-error">Email o password errate!</p>
+            </div>
+
+            <div id="form-register" class="auth-form">
+                <input type="email" id="register-email" placeholder="Scegli una Email">
+                <input type="password" id="register-password" placeholder="Crea una Password">
+                <button class="btn-auth btn-register" onclick="gestisciRegistrazione()">Registrati</button>
+                <p id="register-error" class="auth-error">Compila tutti i campi o email già usata!</p>
+                <p id="register-success" class="auth-success">Account creato! Ora puoi accedere.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-app">
+        <header>
+            <h1>📊 AuraContabilita</h1>
+            <div>
+                <button class="btn-add" onclick="aggiungiAbbonamento()">➕ Nuovo</button>
+                <button class="sidebar-btn" style="width: auto; display: inline-block; margin: 0; padding: 10px;" onclick="gestisciLogout()">🚪 Esci</button>
+            </div>
+        </header>
+
+        <div class="app-container">
+            <div class="main-content">
+                <div class="box">
+                    <details open>
+                        <summary>📁 Nuovo Abbonamento</summary>
+                        <div class="form-row">
+                            <input type="text" id="nome-abb" placeholder="Nome (es. Netflix)">
+                            <input type="number" id="prezzo-abb" placeholder="Prezzo" step="0.01">
+                        </div>
+                        <div class="form-row">
+                            <select id="categoria">
+                                <option value="Intrattenimento">Intrattenimento</option>
+                                <option value="Lavoro">Lavoro</option>
+                                <option value="Utenze">Utenze</option>
+                            </select>
+                            <select id="ciclo">
+                                <option value="Mensile">Mensile</option>
+                                <option value="Annuale">Annuale</option>
+                            </select>
+                            <select id="metodo">
+                                <option value="Carta">Carta di Credito</option>
+                                <option value="PayPal">PayPal</option>
+                            </select>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="box">
+                    <h2>I tuoi Abbonamenti</h2>
+                    <ul class="subs-list" id="lista-abbonamenti">
+                        </ul>
+                </div>
+
+                <div class="footer-count">
+                    📉 Conteggio: <span id="count-attivi" style="color: #2ecc71;">0</span> Attivi | <span id="count-inattivi" style="color: #e74c3c;">0</span> Annullati
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <details open>
+                    <summary>💸 Riepilogo Finanziario</summary>
+                    <div style="margin-top: 15px;">
+                        <div class="stat-item"><label>Totale Mensile</label><span id="totale-mensile">€ 0.00</span></div>
+                        <div class="stat-item"><label>Totale Annuo</label><span id="totale-annuo">€ 0.00</span></div>
+                    </div>
+                </details>
+                <hr style="border: 0; border-top: 1px solid #eee; width: 100%;">
+                <button class="sidebar-btn" onclick="apriModale('modale-impostazioni')">⚙️ Impostazioni</button>
+                <button class="sidebar-btn" onclick="apriModale('modale-calendario')">📅 Calendario</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modale-impostazioni" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-btn" onclick="chiudiModale('modale-impostazioni')">&times;</span>
+            <h2 style="margin-top: 0; color: #2c3e50;">⚙️ Impostazioni</h2>
+            <div class="form-row">
+                <label style="width: 100%; display: block; margin-top: 10px;">Valuta Preferita:</label>
+                <select style="width: 100%; padding: 10px;"><option>€ (Euro)</option></select>
+            </div>
+            <div class="form-row">
+                <label style="width: 100%; display: block; margin-top: 10px;">Backup:</label>
+                <select style="width: 100%; padding: 10px;"><option>iCloud (Automatico)</option></select>
+            </div>
+            <button class="btn-danger" onclick="resetForzatoDati()">⚠️ RESET FORZATO DEI DATI</button>
+        </div>
+    </div>
+
+    <div id="modale-calendario" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-btn" onclick="chiudiModale('modale-calendario')">&times;</span>
+            <h2 style="margin-top: 0;">📅 Calendario Scadenze</h2>
+            <p>I tuoi dati sono sincronizzati nel database locale del browser.</p>
+        </div>
+    </div>
+
+    <script>
+        let databaseAbbonamenti = [];
+        let databaseUtenti = [];
+        
+
+        // Al caricamento, estrae sia gli utenti registrati che la sessione corrente
+        window.onload = function() {
+            const utentiSalvati = localStorage.getItem("aura_db_utenti");
+            if (utentiSalvati) {
+                databaseUtenti = JSON.parse(utentiSalvati);
+            }
+            
+            if (localStorage.getItem("aura_logged") === "true") {
+                mostraApplicazione();
+            }
+        };
+
+        // --- SWITCH LOGIN / REGISTRAZIONE ---
+        function switchAuthTab(tipo) {
+            document.getElementById("login-error").style.display = "none";
+            document.getElementById("register-error").style.display = "none";
+            document.getElementById("register-success").style.display = "none";
+
+            if (tipo === 'login') {
+                document.getElementById("tab-login").classList.add("active");
+                document.getElementById("tab-register").classList.remove("active");
+                document.getElementById("form-login").classList.add("active");
+                document.getElementById("form-register").classList.remove("active");
+            } else {
+                document.getElementById("tab-register").classList.add("active");
+                document.getElementById("tab-login").classList.remove("active");
+                document.getElementById("form-register").classList.add("active");
+                document.getElementById("form-login").classList.remove("active");
+            }
+        }
+
+        // --- REGISTRAZIONE ---
+        function gestisciRegistrazione() {
+            const email = document.getElementById("register-email").value.trim();
+            const password = document.getElementById("register-password").value;
+            const erroreReg = document.getElementById("register-error");
+            const successoReg = document.getElementById("register-success");
+
+            if (email === "" || password === "") {
+                erroreReg.innerText = "Compila tutti i campi!";
+                erroreReg.style.display = "block";
+                return;
+            }
+
+            // Controllo se l'email esiste già nel LocalStorage
+            const utenteEsistente = databaseUtenti.find(u => u.email === email);
+            if (utenteEsistente) {
+                erroreReg.innerText = "Questo account (Email) esiste già!";
+                erroreReg.style.display = "block";
+                return;
+            }
+
+            // Salvo il nuovo utente nel database locale
+            databaseUtenti.push({ email: email, password: password });
+            localStorage.setItem("aura_db_utenti", JSON.stringify(databaseUtenti));
+
+            erroreReg.style.display = "none";
+            successoReg.style.display = "block";
+
+            // Svuoto i campi e dopo 1.5 secondi torna al pannello login automaticamente
+            document.getElementById("register-email").value = "";
+            document.getElementById("register-password").value = "";
+            setTimeout(() => { switchAuthTab('login'); }, 1500);
+        }
+
+        // --- LOGIN ---
+        function gestisciLogin() {
+            const email = document.getElementById("login-email").value.trim();
+            const password = document.getElementById("login-password").value;
+            const erroreLog = document.getElementById("login-error");
+
+            // Cerca corrispondenza nel finto DB utenti
+            const utente = databaseUtenti.find(u => u.email === email && u.password === password);
+
+            if (utente) {
+                localStorage.setItem("aura_logged", "true");
+                erroreLog.style.display = "none";
+                mostraApplicazione();
+            } else {
+                erroreLog.style.display = "block";
+            }
+        }
+
+        function gestisciLogout() {
+            localStorage.removeItem("aura_logged");
+            location.reload();
+        }
+
+        function mostraApplicazione() {
+            document.getElementById("auth-screen").style.display = "none";
+            document.getElementById("main-app").style.display = "block";
+            caricaDatiDalDatabase();
+        }
+
+        // --- FUNZIONI MODALI ---
+        function apriModale(idModal) { document.getElementById(idModal).style.display = "flex"; }
+        function chiudiModale(idModal) { document.getElementById(idModal).style.display = "none"; }
+
+        // --- GESTIONE DATI ABBONAMENTI ---
+        function caricaDatiDalDatabase() {
+            const datiSalvati = localStorage.getItem("aura_db_abbonamenti");
+            databaseAbbonamenti = datiSalvati ? JSON.parse(datiSalvati) : [];
+            aggiornaInterfaccia();
+        }
+
+        function salvaNelDatabase() {
+            localStorage.setItem("aura_db_abbonamenti", JSON.stringify(databaseAbbonamenti));
+            aggiornaInterfaccia();
+        }
+
+        function aggiornaInterfaccia() {
+            const lista = document.getElementById("lista-abbonamenti");
+            lista.innerHTML = ""; 
+
+            let attivi = 0; let annullati = 0; let spesaMensile = 0;
+
+            databaseAbbonamenti.forEach(abb => {
+                const nuovoElemento = document.createElement("li");
+                
+                if (abb.stato === "annullato") {
+                    annullati++;
+                    nuovoElemento.classList.add("canceled");
+                    nuovoElemento.innerHTML = `
+                        <div>
+                            <strong>${abb.nome}</strong> - € ${abb.prezzo.toFixed(2)}/${abb.ciclo.toLowerCase()} <br>
+                            <small>Categoria: ${abb.categoria} | Pagamento: ${abb.metodo}</small><br>
+                            <span style="color: #e74c3c; font-weight: bold; font-size:12px;">Stato: Annullato</span>
+                        </div>
+                    `;
+                } else {
+                    attivi++;
+                    if (abb.ciclo === "Mensile") spesaMensile += abb.prezzo;
+                    else if (abb.ciclo === "Annuale") spesaMensile += (abb.prezzo / 12);
+
+                    nuovoElemento.innerHTML = `
+                        <div>
+                            <strong>${abb.nome}</strong> - € ${abb.prezzo.toFixed(2)}/${abb.ciclo.toLowerCase()} <br>
+                            <small>Categoria: ${abb.categoria} | Pagamento: ${abb.metodo}</small>
+                        </div>
+                        <button class="btn-cancel" onclick="annullaAbbonamento('${abb.id}')">❌ Annulla</button>
+                    `;
+                }
+                lista.appendChild(nuovoElemento);
+            });
+
+            document.getElementById("count-attivi").innerText = attivi;
+            document.getElementById("count-inattivi").innerText = annullati;
+            document.getElementById("totale-mensile").innerText = "€ " + spesaMensile.toFixed(2);
+            document.getElementById("totale-annuo").innerText = "€ " + (spesaMensile * 12).toFixed(2);
+        }
+
+        function aggiungiAbbonamento() {
+            const nome = document.getElementById("nome-abb").value;
+            const prezzo = parseFloat(document.getElementById("prezzo-abb").value);
+            const categoria = document.getElementById("categoria").value;
+            const ciclo = document.getElementById("ciclo").value;
+            const metodo = document.getElementById("metodo").value;
+
+            if (nome === "" || isNaN(prezzo)) {
+                alert("Inserisci un Nome e un Prezzo validi.");
+                return;
+            }
+
+            databaseAbbonamenti.push({
+                id: 'abb-' + Date.now(),
+                nome: nome,
+                prezzo: prezzo,
+                categoria: categoria,
+                ciclo: ciclo,
+                metodo: metodo,
+                stato: "attivo"
+            });
+            salvaNelDatabase();
+
+            document.getElementById("nome-abb").value = "";
+            document.getElementById("prezzo-abb").value = "";
+        }
+
+        function annullaAbbonamento(id) {
+            const indice = databaseAbbonamenti.findIndex(abb => abb.id === id);
+            if (indice !== -1) {
+                databaseAbbonamenti[indice].stato = "annullato";
+                salvaNelDatabase();
+            }
+        }
+
+        function resetForzatoDati() {
+            const conferma = confirm("⚠️ ATTENZIONE!\nSei sicuro di voler resettare FORZATAMENTE tutti i dati? Saranno cancellati tutti gli abbonamenti e tutti gli account creati!");
+            if (conferma) {
+                localStorage.clear();
+                alert("Database azzerato. L'applicazione verrà riavviata.");
+                location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
