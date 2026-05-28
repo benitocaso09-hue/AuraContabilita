@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AuraContabilita</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2c3e50">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
     <style>
         /* --- STILI BASE --- */
         body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
@@ -70,23 +75,20 @@
         .modal-content { background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 500px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         .close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #7f8c8d; }
     </style>
-    <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#000000"> 
-<link rel="apple-touch-icon" href="icon-192.png">
-
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./service-worker.js')
-        .then(registration => {
-          console.log('Service Worker registrato con successo:', registration);
-        })
-        .catch(error => {
-          console.log('Registrazione del Service Worker fallita:', error);
+    
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./service-worker.js')
+            .then(registration => {
+              console.log('Service Worker registrato con successo:', registration);
+            })
+            .catch(error => {
+              console.log('Registrazione del Service Worker fallita:', error);
+            });
         });
-    });
-  }
-</script>
+      }
+    </script>
 </head>
 <body>
 
@@ -153,7 +155,7 @@
                 </div>
 
                 <div class="box">
-                    <h2>I tuoi Abbonamenti</h2>
+                    <h2>I tuoi Abbonamenti (Cloud)</h2>
                     <ul class="subs-list" id="lista-abbonamenti">
                         </ul>
                 </div>
@@ -187,10 +189,10 @@
                 <select style="width: 100%; padding: 10px;"><option>€ (Euro)</option></select>
             </div>
             <div class="form-row">
-                <label style="width: 100%; display: block; margin-top: 10px;">Backup:</label>
-                <select style="width: 100%; padding: 10px;"><option>iCloud (Automatico)</option></select>
+                <label style="width: 100%; display: block; margin-top: 10px;">Stato Sincronizzazione:</label>
+                <select style="width: 100%; padding: 10px;" disabled><option>Connesso a Firebase Cloud 🟢</option></select>
             </div>
-            <button class="btn-danger" onclick="resetForzatoDati()">⚠️ RESET FORZATO DEI DATI</button>
+            <button class="btn-danger" onclick="alert('Funzione disattivata. Gestisci l\'eliminazione da Firebase Console o annulla i singoli abbonamenti.')">⚠️ RESET FORZATO DEI DATI</button>
         </div>
     </div>
 
@@ -198,33 +200,56 @@
         <div class="modal-content">
             <span class="close-btn" onclick="chiudiModale('modale-calendario')">&times;</span>
             <h2 style="margin-top: 0;">📅 Calendario Scadenze</h2>
-            <p>I tuoi dati sono sincronizzati nel database locale del browser.</p>
+            <p>I tuoi dati sono sincronizzati nel database Cloud di Firebase in tempo reale.</p>
         </div>
     </div>
 
-    <script>
-        let databaseAbbonamenti = [];
-        let databaseUtenti = [];
-        
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
-        // Al caricamento, estrae sia gli utenti registrati che la sessione corrente
+        // LE TUE CHIAVI FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyADVcsYtxCHJFN42P4EVWhMd4tycbp_qa8",
+            authDomain: "auracontabilita-32dd6.firebaseapp.com",
+            projectId: "auracontabilita-32dd6",
+            storageBucket: "auracontabilita-32dd6.firebasestorage.app",
+            messagingSenderId: "214739913168",
+            appId: "1:214739913168:web:7a74467dbaa369ec3011d5"
+        };
+
+        // Inizializza Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let utenteCorrenteEmail = null;
+        let listenerAbbonamenti = null;
+
+        // Rendi le funzioni accessibili ai pulsanti HTML
+        window.switchAuthTab = switchAuthTab;
+        window.gestisciRegistrazione = gestisciRegistrazione;
+        window.gestisciLogin = gestisciLogin;
+        window.gestisciLogout = gestisciLogout;
+        window.aggiungiAbbonamento = aggiungiAbbonamento;
+        window.annullaAbbonamento = annullaAbbonamento;
+        window.apriModale = id => document.getElementById(id).style.display = "flex";
+        window.chiudiModale = id => document.getElementById(id).style.display = "none";
+
+        // Controllo sessione all'avvio
         window.onload = function() {
-            const utentiSalvati = localStorage.getItem("aura_db_utenti");
-            if (utentiSalvati) {
-                databaseUtenti = JSON.parse(utentiSalvati);
-            }
-            
-            if (localStorage.getItem("aura_logged") === "true") {
+            const sessione = localStorage.getItem("aura_cloud_user");
+            if (sessione) {
+                utenteCorrenteEmail = sessione;
                 mostraApplicazione();
+            } else {
+                document.getElementById("auth-screen").style.display = "flex";
             }
         };
 
-        // --- SWITCH LOGIN / REGISTRAZIONE ---
         function switchAuthTab(tipo) {
             document.getElementById("login-error").style.display = "none";
             document.getElementById("register-error").style.display = "none";
             document.getElementById("register-success").style.display = "none";
-
             if (tipo === 'login') {
                 document.getElementById("tab-login").classList.add("active");
                 document.getElementById("tab-register").classList.remove("active");
@@ -238,9 +263,9 @@
             }
         }
 
-        // --- REGISTRAZIONE ---
-        function gestisciRegistrazione() {
-            const email = document.getElementById("register-email").value.trim();
+        // --- REGISTRAZIONE SU FIREBASE CLOUD ---
+        async function gestisciRegistrazione() {
+            const email = document.getElementById("register-email").value.trim().toLowerCase();
             const password = document.getElementById("register-password").value;
             const erroreReg = document.getElementById("register-error");
             const successoReg = document.getElementById("register-success");
@@ -251,114 +276,117 @@
                 return;
             }
 
-            // Controllo se l'email esiste già nel LocalStorage
-            const utenteEsistente = databaseUtenti.find(u => u.email === email);
-            if (utenteEsistente) {
-                erroreReg.innerText = "Questo account (Email) esiste già!";
+            try {
+                const userDoc = await getDoc(doc(db, "utenti", email));
+                if (userDoc.exists()) {
+                    erroreReg.innerText = "Questo account esiste già!";
+                    erroreReg.style.display = "block";
+                    return;
+                }
+
+                await setDoc(doc(db, "utenti", email), { password: password });
+                erroreReg.style.display = "none";
+                successoReg.style.display = "block";
+                
+                document.getElementById("register-email").value = "";
+                document.getElementById("register-password").value = "";
+                setTimeout(() => { switchAuthTab('login'); }, 1500);
+            } catch (e) {
+                console.error("Errore registrazione:", e);
+                erroreReg.innerText = "Errore di connessione al database. Assicurati di aver impostato le Regole di Sicurezza in modalità test su Firebase.";
                 erroreReg.style.display = "block";
-                return;
             }
-
-            // Salvo il nuovo utente nel database locale
-            databaseUtenti.push({ email: email, password: password });
-            localStorage.setItem("aura_db_utenti", JSON.stringify(databaseUtenti));
-
-            erroreReg.style.display = "none";
-            successoReg.style.display = "block";
-
-            // Svuoto i campi e dopo 1.5 secondi torna al pannello login automaticamente
-            document.getElementById("register-email").value = "";
-            document.getElementById("register-password").value = "";
-            setTimeout(() => { switchAuthTab('login'); }, 1500);
         }
 
-        // --- LOGIN ---
-        function gestisciLogin() {
-            const email = document.getElementById("login-email").value.trim();
+        // --- LOGIN DA FIREBASE CLOUD ---
+        async function gestisciLogin() {
+            const email = document.getElementById("login-email").value.trim().toLowerCase();
             const password = document.getElementById("login-password").value;
             const erroreLog = document.getElementById("login-error");
 
-            // Cerca corrispondenza nel finto DB utenti
-            const utente = databaseUtenti.find(u => u.email === email && u.password === password);
-
-            if (utente) {
-                localStorage.setItem("aura_logged", "true");
-                erroreLog.style.display = "none";
-                mostraApplicazione();
-            } else {
+            try {
+                const userDoc = await getDoc(doc(db, "utenti", email));
+                if (userDoc.exists() && userDoc.data().password === password) {
+                    localStorage.setItem("aura_cloud_user", email);
+                    utenteCorrenteEmail = email;
+                    erroreLog.style.display = "none";
+                    mostraApplicazione();
+                } else {
+                    erroreLog.innerText = "Email o password errate!";
+                    erroreLog.style.display = "block";
+                }
+            } catch(e) {
+                console.error("Errore login:", e);
+                erroreLog.innerText = "Errore di connessione a Firebase.";
                 erroreLog.style.display = "block";
             }
         }
 
         function gestisciLogout() {
-            localStorage.removeItem("aura_logged");
+            if (listenerAbbonamenti) listenerAbbonamenti();
+            localStorage.removeItem("aura_cloud_user");
             location.reload();
         }
 
         function mostraApplicazione() {
             document.getElementById("auth-screen").style.display = "none";
             document.getElementById("main-app").style.display = "block";
-            caricaDatiDalDatabase();
+            attivaSincronizzazioneInTempoReale();
         }
 
-        // --- FUNZIONI MODALI ---
-        function apriModale(idModal) { document.getElementById(idModal).style.display = "flex"; }
-        function chiudiModale(idModal) { document.getElementById(idModal).style.display = "none"; }
+        // --- SINCRONIZZAZIONE IN TEMPO REALE DEGLI ABBONAMENTI ---
+        function attivaSincronizzazioneInTempoReale() {
+            const q = query(collection(db, "abbonamenti"), where("userEmail", "==", utenteCorrenteEmail));
+            
+            listenerAbbonamenti = onSnapshot(q, (querySnapshot) => {
+                const lista = document.getElementById("lista-abbonamenti");
+                lista.innerHTML = "";
 
-        // --- GESTIONE DATI ABBONAMENTI ---
-        function caricaDatiDalDatabase() {
-            const datiSalvati = localStorage.getItem("aura_db_abbonamenti");
-            databaseAbbonamenti = datiSalvati ? JSON.parse(datiSalvati) : [];
-            aggiornaInterfaccia();
-        }
+                let attivi = 0; let annullati = 0; let spesaMensile = 0;
 
-        function salvaNelDatabase() {
-            localStorage.setItem("aura_db_abbonamenti", JSON.stringify(databaseAbbonamenti));
-            aggiornaInterfaccia();
-        }
+                querySnapshot.forEach((docSnap) => {
+                    const abb = docSnap.data();
+                    const docId = docSnap.id;
+                    const nuovoElemento = document.createElement("li");
 
-        function aggiornaInterfaccia() {
-            const lista = document.getElementById("lista-abbonamenti");
-            lista.innerHTML = ""; 
+                    if (abb.stato === "annullato") {
+                        annullati++;
+                        nuovoElemento.classList.add("canceled");
+                        nuovoElemento.innerHTML = `
+                            <div>
+                                <strong>${abb.nome}</strong> - € ${abb.prezzo.toFixed(2)}/${abb.ciclo.toLowerCase()} <br>
+                                <small>Categoria: ${abb.categoria} | Pagamento: ${abb.metodo}</small><br>
+                                <span style="color: #e74c3c; font-weight: bold; font-size:12px;">Stato: Annullato</span>
+                            </div>
+                        `;
+                    } else {
+                        attivi++;
+                        if (abb.ciclo === "Mensile") spesaMensile += abb.prezzo;
+                        else if (abb.ciclo === "Annuale") spesaMensile += (abb.prezzo / 12);
 
-            let attivi = 0; let annullati = 0; let spesaMensile = 0;
+                        nuovoElemento.innerHTML = `
+                            <div>
+                                <strong>${abb.nome}</strong> - € ${abb.prezzo.toFixed(2)}/${abb.ciclo.toLowerCase()} <br>
+                                <small>Categoria: ${abb.categoria} | Pagamento: ${abb.metodo}</small>
+                            </div>
+                            <button class="btn-cancel" onclick="annullaAbbonamento('${docId}')">❌ Annulla</button>
+                        `;
+                    }
+                    lista.appendChild(nuovoElemento);
+                });
 
-            databaseAbbonamenti.forEach(abb => {
-                const nuovoElemento = document.createElement("li");
-                
-                if (abb.stato === "annullato") {
-                    annullati++;
-                    nuovoElemento.classList.add("canceled");
-                    nuovoElemento.innerHTML = `
-                        <div>
-                            <strong>${abb.nome}</strong> - € ${abb.prezzo.toFixed(2)}/${abb.ciclo.toLowerCase()} <br>
-                            <small>Categoria: ${abb.categoria} | Pagamento: ${abb.metodo}</small><br>
-                            <span style="color: #e74c3c; font-weight: bold; font-size:12px;">Stato: Annullato</span>
-                        </div>
-                    `;
-                } else {
-                    attivi++;
-                    if (abb.ciclo === "Mensile") spesaMensile += abb.prezzo;
-                    else if (abb.ciclo === "Annuale") spesaMensile += (abb.prezzo / 12);
-
-                    nuovoElemento.innerHTML = `
-                        <div>
-                            <strong>${abb.nome}</strong> - € ${abb.prezzo.toFixed(2)}/${abb.ciclo.toLowerCase()} <br>
-                            <small>Categoria: ${abb.categoria} | Pagamento: ${abb.metodo}</small>
-                        </div>
-                        <button class="btn-cancel" onclick="annullaAbbonamento('${abb.id}')">❌ Annulla</button>
-                    `;
-                }
-                lista.appendChild(nuovoElemento);
+                document.getElementById("count-attivi").innerText = attivi;
+                document.getElementById("count-inattivi").innerText = annullati;
+                document.getElementById("totale-mensile").innerText = "€ " + spesaMensile.toFixed(2);
+                document.getElementById("totale-annuo").innerText = "€ " + (spesaMensile * 12).toFixed(2);
+            }, (error) => {
+                console.error("Errore onSnapshot:", error);
+                alert("Errore di lettura dal database Firebase. Verifica le regole di sicurezza.");
             });
-
-            document.getElementById("count-attivi").innerText = attivi;
-            document.getElementById("count-inattivi").innerText = annullati;
-            document.getElementById("totale-mensile").innerText = "€ " + spesaMensile.toFixed(2);
-            document.getElementById("totale-annuo").innerText = "€ " + (spesaMensile * 12).toFixed(2);
         }
 
-        function aggiungiAbbonamento() {
+        // --- INSERIMENTO NUOVO ABBONAMENTO SU CLOUD ---
+        async function aggiungiAbbonamento() {
             const nome = document.getElementById("nome-abb").value;
             const prezzo = parseFloat(document.getElementById("prezzo-abb").value);
             const categoria = document.getElementById("categoria").value;
@@ -370,35 +398,34 @@
                 return;
             }
 
-            databaseAbbonamenti.push({
-                id: 'abb-' + Date.now(),
-                nome: nome,
-                prezzo: prezzo,
-                categoria: categoria,
-                ciclo: ciclo,
-                metodo: metodo,
-                stato: "attivo"
-            });
-            salvaNelDatabase();
+            const nuovoId = 'abb-' + Date.now();
 
-            document.getElementById("nome-abb").value = "";
-            document.getElementById("prezzo-abb").value = "";
-        }
-
-        function annullaAbbonamento(id) {
-            const indice = databaseAbbonamenti.findIndex(abb => abb.id === id);
-            if (indice !== -1) {
-                databaseAbbonamenti[indice].stato = "annullato";
-                salvaNelDatabase();
+            try {
+                await setDoc(doc(db, "abbonamenti", nuovoId), {
+                    userEmail: utenteCorrenteEmail,
+                    nome: nome,
+                    prezzo: prezzo,
+                    categoria: categoria,
+                    ciclo: ciclo,
+                    metodo: metodo,
+                    stato: "attivo"
+                });
+                document.getElementById("nome-abb").value = "";
+                document.getElementById("prezzo-abb").value = "";
+            } catch(e) {
+                console.error("Errore scrittura:", e);
+                alert("Errore durante il salvataggio nel database.");
             }
         }
 
-        function resetForzatoDati() {
-            const conferma = confirm("⚠️ ATTENZIONE!\nSei sicuro di voler resettare FORZATAMENTE tutti i dati? Saranno cancellati tutti gli abbonamenti e tutti gli account creati!");
-            if (conferma) {
-                localStorage.clear();
-                alert("Database azzerato. L'applicazione verrà riavviata.");
-                location.reload();
+        // --- ANNULLAMENTO ABBONAMENTO SU CLOUD ---
+        async function annullaAbbonamento(docId) {
+            try {
+                await updateDoc(doc(db, "abbonamenti", docId), {
+                    stato: "annullato"
+                });
+            } catch(e) {
+                console.error("Errore aggiornamento:", e);
             }
         }
     </script>
